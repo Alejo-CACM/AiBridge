@@ -217,6 +217,27 @@ class AiBridgeAnalytics
         return $exists;
     }
 
+    /**
+     * PrestaShop's own core log (`ps_log`, written by PrestaShopLogger) —
+     * errors and warnings that PrestaShop itself and any installed module
+     * already record on their own (payment failures, mail errors, module
+     * install/upgrade problems, etc). Not a full change-audit — PrestaShop
+     * has no built-in "who edited what field" trail — but it is real,
+     * system-wide signal for "did something break or misbehave".
+     */
+    public function systemLog($from, $to, $limit = 50)
+    {
+        return (array) Db::getInstance()->executeS(
+            'SELECT l.id_log, l.severity, l.message, l.error_code, l.object_type, l.object_id, l.date_add,
+                e.firstname, e.lastname
+            FROM `' . _DB_PREFIX_ . 'log` l
+            LEFT JOIN `' . _DB_PREFIX_ . 'employee` e ON e.id_employee = l.id_employee
+            WHERE l.date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"
+            ORDER BY l.date_add DESC
+            LIMIT ' . (int) $limit
+        );
+    }
+
     public function lowStockProducts($threshold = 5, $limit = 20)
     {
         $languageId = (int) Context::getContext()->language->id;

@@ -35,6 +35,8 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         $inactiveCustomers = $analytics->inactiveCustomers(90);
         $lowStock = $analytics->lowStockProducts(5);
         $billingStatus = $analytics->wephoneBillingStatus($from, $to);
+        $logLimit = $this->resolveLimit('log_limit');
+        $systemLog = $analytics->systemLog($from, $to, $logLimit);
 
         return $this->renderRangeForm($from, $to, $preset)
             . ($billingStatus !== null ? $this->renderBillingStatus($billingStatus) : '')
@@ -48,7 +50,8 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
             . '<div class="col-lg-6">' . $this->renderTopCustomers($topCustomers, $customersLimit) . '</div>'
             . '<div class="col-lg-6">' . $this->renderInactiveCustomers($inactiveCustomers) . '</div>'
             . '</div>'
-            . $this->renderLowStock($lowStock);
+            . $this->renderLowStock($lowStock)
+            . $this->renderSystemLog($systemLog, $logLimit);
     }
 
     /**
@@ -414,6 +417,57 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
             $badge = $quantity <= 0 ? 'label-danger' : 'label-warning';
             $html .= '<tr><td><a href="' . Tools::safeOutput($editUrl) . '">' . Tools::safeOutput((string) $row['name']) . '</a></td>'
                 . '<td><span class="label ' . $badge . '">' . $quantity . '</span></td>'
+                . '</tr>';
+        }
+
+        $html .= '</tbody></table></div>';
+
+        return $html;
+    }
+
+    /**
+     * ps_log is PrestaShop's own error/warning log (PrestaShopLogger) — not
+     * a full "who changed what" audit trail (PrestaShop has none built in),
+     * but real signal for "did the system or a module misbehave".
+     */
+    private function renderSystemLog(array $rows, $limit)
+    {
+        $severityLabels = array(
+            1 => array('Info', 'label-info'),
+            2 => array('Aviso', 'label-warning'),
+            3 => array('Error', 'label-danger'),
+            4 => array('Error grave', 'label-danger'),
+        );
+
+        $html = '<div class="panel"><div class="panel-heading"><i class="icon-list-alt"></i> '
+            . $this->l('Registro del sistema (PrestaShop)') . $this->limitForm('log_limit', $limit) . '</div>'
+            . '<p class="help-block" style="padding:0 15px;">'
+            . $this->l('Errores y avisos que PrestaShop y los módulos instalados registran por su cuenta. No es un historial de cambios manuales — PrestaShop no guarda eso de fábrica.')
+            . '</p>';
+
+        if (!$rows) {
+            return $html . '<p class="help-block" style="padding:0 15px 15px;">' . $this->l('Sin entradas en este período.') . '</p></div>';
+        }
+
+        $html .= '<table class="table"><thead><tr>'
+            . '<th>' . $this->l('Fecha') . '</th>'
+            . '<th>' . $this->l('Nivel') . '</th>'
+            . '<th>' . $this->l('Mensaje') . '</th>'
+            . '<th>' . $this->l('Origen') . '</th>'
+            . '<th>' . $this->l('Empleado') . '</th>'
+            . '</tr></thead><tbody>';
+
+        foreach ($rows as $row) {
+            $severity = (int) $row['severity'];
+            $severityLabel = $severityLabels[$severity] ?? array('Nivel ' . $severity, 'label-default');
+            $employee = trim((string) $row['firstname'] . ' ' . (string) $row['lastname']);
+            $origin = trim((string) $row['object_type'] . ' ' . ($row['object_id'] ? '#' . (int) $row['object_id'] : ''));
+
+            $html .= '<tr><td>' . Tools::safeOutput((string) $row['date_add']) . '</td>'
+                . '<td><span class="label ' . $severityLabel[1] . '">' . $severityLabel[0] . '</span></td>'
+                . '<td>' . Tools::safeOutput((string) $row['message']) . '</td>'
+                . '<td>' . Tools::safeOutput($origin) . '</td>'
+                . '<td>' . ($employee !== '' ? Tools::safeOutput($employee) : '<span class="text-muted">-</span>') . '</td>'
                 . '</tr>';
         }
 

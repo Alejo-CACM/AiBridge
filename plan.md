@@ -363,6 +363,16 @@ Versión `1.20.5`. Ajuste pedido tras revisar la sección 25 en vivo: el usuario
 
 Verificado en vivo en `wephone.es`: pedidos pasó de 230 (con `valid=1`) a 339 (todos menos cancelados) en el mismo rango de 30 días — la diferencia son pedidos reales que antes se perdían por el filtro `valid`.
 
+## 27. Marcas, Top-N configurable, y registro del sistema en Analítica (2026-08-22)
+
+Versión `1.20.7`.
+
+* **`topBrands()`**: mismo criterio que `topProducts()` (todos los pedidos del rango, excluye solo cancelados), agrupado por `id_manufacturer` vía `order_detail → product → manufacturer`. Productos sin marca o cuyo producto se borró después de la venta no se atribuyen a ninguna marca (INNER JOIN intencional).
+* **Selector "Top N" (10/25/50/100)** en Productos, Marcas y Clientes — cada panel tiene su propio `<select>` que resubmite la página preservando el resto de los parámetros GET (rango de fechas, otros límites) vía campos ocultos, así cambiar uno no resetea los demás.
+* **"Registro del sistema (PrestaShop)"**: nuevo panel al final, lee `ps_log` (la tabla que llena `PrestaShopLogger` sola — errores/avisos que el propio PrestaShop y los módulos instalados registran, ej. fallos de pago, problemas de instalación). **Aclarado explícitamente con el usuario que esto NO es un historial de "quién cambió qué campo"** — PrestaShop no tiene eso de fábrica, y no se pretendió construir algo que no es realmente alcanzable. Se le ofrecieron dos alcances (`ps_log` solo, o `ps_log` + últimas conexiones de empleados) y eligió el primero.
+
+Todo probado en vivo contra `wephone.es` antes de publicar (mismo patrón de scripts de diagnóstico puntuales) — `topBrands` devolvió marcas reales (Wephone, Apple, Samsung, REDMI, Lenyes) y `systemLog` devolvió entradas reales de `ps_log` (mayormente llamadas API del módulo `ps_mbo`, severidad informativa).
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.
