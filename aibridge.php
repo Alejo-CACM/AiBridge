@@ -12,7 +12,7 @@ class AiBridge extends Module
     public const API_TOKEN_CONFIGURATION_KEY = 'AIBRIDGE_API_TOKEN';
     public const DIRECT_APPLY_TEST_MODE_CONFIGURATION_KEY = 'AIBRIDGE_DIRECT_APPLY_TEST_MODE';
     public const UPDATE_MANIFEST_URL_CONFIGURATION_KEY = 'AIBRIDGE_UPDATE_MANIFEST_URL';
-    private const DEFAULT_UPDATE_MANIFEST_URL = 'https://saruia.es/aibridge-releases/manifest.json';
+    private const DEFAULT_UPDATE_MANIFEST_URL = 'https://raw.githubusercontent.com/Alejo-CACM/AiBridge/main/dist/manifest.json';
 
     private $authenticatedEmployeeId = 0;
 
@@ -20,7 +20,7 @@ class AiBridge extends Module
     {
         $this->name = 'aibridge';
         $this->tab = 'administration';
-        $this->version = '1.18.0';
+        $this->version = '1.18.1';
         $this->author = 'Proyecto profesional';
         $this->need_instance = 0;
         $this->bootstrap = true;
