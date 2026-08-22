@@ -1,6 +1,7 @@
 <?php
 
 require_once dirname(__FILE__) . '/../../classes/AiBridgeConversation.php';
+require_once dirname(__FILE__) . '/../../classes/ai/AiBridgeChatOrchestrator.php';
 
 class AdminAiBridgeChatController extends ModuleAdminController
 {
@@ -43,6 +44,11 @@ class AdminAiBridgeChatController extends ModuleAdminController
             'at' => date('c'),
         );
 
+        $replies = (new AiBridgeChatOrchestrator())->respond($messages, $employeeId);
+        foreach ($replies as $reply) {
+            $messages[] = $reply;
+        }
+
         if (count($messages) > self::MAX_MESSAGES_KEPT) {
             $messages = array_slice($messages, -self::MAX_MESSAGES_KEPT);
         }
@@ -52,7 +58,7 @@ class AdminAiBridgeChatController extends ModuleAdminController
         die(json_encode(array(
             'success' => (bool) $saved,
             'messages' => $messages,
-            'awaiting_reply' => true,
+            'awaiting_reply' => false,
         )));
     }
 
