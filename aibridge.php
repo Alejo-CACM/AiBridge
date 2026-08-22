@@ -20,7 +20,7 @@ class AiBridge extends Module
     {
         $this->name = 'aibridge';
         $this->tab = 'administration';
-        $this->version = '1.19.0';
+        $this->version = '1.19.1';
         $this->author = 'Proyecto profesional';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -554,16 +554,31 @@ $uploadsDeleted = (bool) include __DIR__ . '/sql/uninstall.php';
 
     public function installAiProvidersTab()
     {
-        if ((int) Tab::getIdFromClassName('AdminAiBridgeAiProviders')) {
-            return true;
-        }
+        // Nested under "AI Bridge Chat" (not a top-level sibling under
+        // Modules) because provider configuration only exists to serve the
+        // chat — it has no other reason to be there.
+        $parentId = (int) Tab::getIdFromClassName('AdminAiBridgeChat');
 
-        $parentId = (int) Tab::getIdFromClassName('AdminParentModulesSf');
+        if (!$parentId) {
+            $parentId = (int) Tab::getIdFromClassName('AdminParentModulesSf');
+        }
 
         if (!$parentId) {
             PrestaShopLogger::addLog('AI Bridge AI providers tab parent was not found.', 3);
 
             return false;
+        }
+
+        $existingId = (int) Tab::getIdFromClassName('AdminAiBridgeAiProviders');
+
+        if ($existingId) {
+            $tab = new Tab($existingId);
+            if ((int) $tab->id_parent !== $parentId) {
+                $tab->id_parent = $parentId;
+                $tab->save();
+            }
+
+            return true;
         }
 
         $tab = new Tab();
@@ -572,7 +587,7 @@ $uploadsDeleted = (bool) include __DIR__ . '/sql/uninstall.php';
         $tab->id_parent = $parentId;
 
         foreach (Language::getLanguages(false) as $language) {
-            $tab->name[(int) $language['id_lang']] = 'AI Bridge - Proveedores de IA';
+            $tab->name[(int) $language['id_lang']] = 'Proveedores de IA';
         }
 
         if (!$tab->add()) {
