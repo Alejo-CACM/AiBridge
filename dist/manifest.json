@@ -1,7 +1,7 @@
 {
-    "version":  "1.20.7",
-    "download_url":  "https://raw.githubusercontent.com/Alejo-CACM/AiBridge/main/dist/aibridge-1.20.7.zip",
-    "sha256":  "2131ad30f109e73a13ce3a6f0ba32bf8f7b87db89275446018659be77472ccef",
-    "changelog":  "Release 1.20.7",
+    "version":  "1.20.8",
+    "download_url":  "https://raw.githubusercontent.com/Alejo-CACM/AiBridge/main/dist/aibridge-1.20.8.zip",
+    "sha256":  "275e4ba68bea65dd24580440fa57360b4712a37694522a3414fbc7db032c2945",
+    "changelog":  "Release 1.20.8",
     "min_ps_version":  "8.0.0"
 }

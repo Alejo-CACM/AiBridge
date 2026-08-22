@@ -373,6 +373,24 @@ Versión `1.20.7`.
 
 Todo probado en vivo contra `wephone.es` antes de publicar (mismo patrón de scripts de diagnóstico puntuales) — `topBrands` devolvió marcas reales (Wephone, Apple, Samsung, REDMI, Lenyes) y `systemLog` devolvió entradas reales de `ps_log` (mayormente llamadas API del módulo `ps_mbo`, severidad informativa).
 
+## 28. Log de errores del hosting en Analítica (2026-08-22)
+
+Versión `1.20.8`. El usuario pidió traer el log del **hosting** (no solo `ps_log`) al Back Office, para detectar caídas/lentitud/módulos rotos a nivel servidor.
+
+`AiBridgeAnalytics::hostingErrorLog()`: agrupa el archivo de log en entradas (una entrada empieza en una línea que arranca con `[`, las líneas siguientes sin ese formato son continuación de traza de pila de la entrada anterior), muestra las más recientes primero. Fuente configurable vía `Configuration::get('AIBRIDGE_HOSTING_LOG_PATH')`, con fallback automático a `_PS_ROOT_DIR_/var/aibridge_hosting_log_snapshot.txt`.
+
+**Hallazgo real durante la investigación**: cada sitio se comporta distinto según el hosting:
+* **`saruia.es` (Hostinger)**: sin `open_basedir` — PHP puede leer el log del hosting directo (`/home/u286534710/.logs/error_log_saruia_es`). `AIBRIDGE_HOSTING_LOG_PATH` seteado a esa ruta directamente (vía el mismo script puntual de siempre para escribir `Configuration`).
+* **`wephone.es` (Plesk)**: `open_basedir = /var/www/vhosts/wephone.es/:/tmp/` — PHP no puede leer nada fuera de la carpeta del sitio, ni con un symlink de por medio (se probó explícitamente: PHP resuelve el `realpath` del symlink y lo bloquea igual). Única salida real: una tarea cron **fuera de PHP**, corriendo como root, que copia las últimas 500 líneas del log real a un archivo dentro de la carpeta del sitio cada 5 minutos. Instalado en `/etc/cron.d/aibridge-wephone-log-snapshot`:
+  ```
+  */5 * * * * root tail -n 500 /var/www/vhosts/system/wephone.es/logs/error_log > /var/www/vhosts/wephone.es/httpdocs/var/aibridge_hosting_log_snapshot.txt 2>/dev/null && chmod 644 /var/www/vhosts/wephone.es/httpdocs/var/aibridge_hosting_log_snapshot.txt
+  ```
+  Sembrado manualmente una vez para no esperar los 5 minutos. `AIBRIDGE_HOSTING_LOG_PATH` queda vacío en `wephone.es` — no hace falta, cae solo al snapshot por el fallback.
+
+**Confirmado que este cambio de infraestructura (fuera del código del módulo) fue autorizado explícitamente por el usuario antes de tocarlo** — no es algo que deba repetirse sin preguntar en futuros sitios.
+
+**Hallazgos reales ya visibles en el log de `wephone.es`** gracias a esto: error de núcleo repetido `Call to a member function getAttributeCombinations() on null` en `ProductController.php` al entrar a ciertos productos; el módulo `zakeke` roto (`Class "ZakekeApi" not found`, falla en cada carga); intentos de escaneo (`/.env`, `/.git/`) correctamente bloqueados por ModSecurity — nada que arreglar ahí. Pendiente: limpiar las carpetas `aibridge_backup_*`/`aibridge_failed_*` que quedaron de las reparaciones de hoy (generan ruido de `AH01276` en el log de Apache).
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.

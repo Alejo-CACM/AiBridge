@@ -37,6 +37,8 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         $billingStatus = $analytics->wephoneBillingStatus($from, $to);
         $logLimit = $this->resolveLimit('log_limit');
         $systemLog = $analytics->systemLog($from, $to, $logLimit);
+        $hostingLogLimit = $this->resolveLimit('hosting_log_limit', 25);
+        $hostingLog = $analytics->hostingErrorLog($hostingLogLimit);
 
         return $this->renderRangeForm($from, $to, $preset)
             . ($billingStatus !== null ? $this->renderBillingStatus($billingStatus) : '')
@@ -51,7 +53,8 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
             . '<div class="col-lg-6">' . $this->renderInactiveCustomers($inactiveCustomers) . '</div>'
             . '</div>'
             . $this->renderLowStock($lowStock)
-            . $this->renderSystemLog($systemLog, $logLimit);
+            . $this->renderSystemLog($systemLog, $logLimit)
+            . ($hostingLog !== null ? $this->renderHostingLog($hostingLog, $hostingLogLimit) : '');
     }
 
     /**
@@ -472,6 +475,40 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         }
 
         $html .= '</tbody></table></div>';
+
+        return $html;
+    }
+
+    /**
+     * The hosting's own PHP/Apache error log — catches real fatals and
+     * broken modules that ps_log never sees. See
+     * AiBridgeAnalytics::hostingErrorLog() for why this needs
+     * AIBRIDGE_HOSTING_LOG_PATH configured on hosts that restrict PHP's
+     * file access (open_basedir).
+     */
+    private function renderHostingLog(array $entries, $limit)
+    {
+        $html = '<div class="panel"><div class="panel-heading"><i class="icon-server"></i> '
+            . $this->l('Log de errores del hosting') . $this->limitForm('hosting_log_limit', $limit) . '</div>'
+            . '<p class="help-block" style="padding:0 15px;">'
+            . $this->l('Errores reales de PHP/Apache a nivel servidor (fatales, módulos rotos, deprecaciones) — más completo que el registro del sistema de arriba.')
+            . '</p>';
+
+        if (!$entries) {
+            return $html . '<p class="help-block" style="padding:0 15px 15px;">' . $this->l('Sin entradas disponibles.') . '</p></div>';
+        }
+
+        $html .= '<div style="padding:0 15px 15px;">';
+        foreach ($entries as $entry) {
+            $isFatal = stripos($entry, 'fatal') !== false;
+            $isWarning = !$isFatal && (stripos($entry, 'warning') !== false || stripos($entry, 'deprecated') !== false);
+            $color = $isFatal ? '#d9534f' : ($isWarning ? '#f0ad4e' : '#777');
+            $truncated = Tools::strlen($entry) > 1000 ? Tools::substr($entry, 0, 1000) . '…' : $entry;
+
+            $html .= '<pre style="white-space:pre-wrap;word-break:break-word;border-left:3px solid ' . $color . ';padding:6px 10px;margin-bottom:6px;background:#f9f9f9;font-size:12px;">'
+                . Tools::safeOutput($truncated) . '</pre>';
+        }
+        $html .= '</div></div>';
 
         return $html;
     }

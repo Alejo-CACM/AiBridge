@@ -238,6 +238,67 @@ class AiBridgeAnalytics
         );
     }
 
+    /**
+     * The hosting's own PHP/Apache error log — catches real fatals, broken
+     * modules, deprecations, etc. that never make it into ps_log (which
+     * only has what code explicitly chose to log via PrestaShopLogger).
+     * Reading it directly is often blocked by the host's own `open_basedir`
+     * PHP setting (can't read outside the site's own folder even though FTP
+     * can) — AIBRIDGE_HOSTING_LOG_PATH lets an admin point at a file that
+     * IS readable (either the real log, on hosts without that restriction,
+     * or a periodic snapshot copied in by a cron job on hosts that do
+     * restrict it). Returns null when nothing readable is configured.
+     */
+    public function hostingErrorLog($limit = 30)
+    {
+        $path = $this->hostingLogPath();
+        if ($path === null) {
+            return null;
+        }
+
+        $content = @file_get_contents($path);
+        if ($content === false) {
+            return null;
+        }
+
+        // Both Apache's "[Day Mon DD ...]" and PHP's "[DD-Mon-YYYY ...]"
+        // formats start an entry with "[" - lines that don't are stack
+        // trace continuations of the previous entry.
+        $lines = explode("\n", $content);
+        $entries = array();
+        $current = null;
+        foreach ($lines as $line) {
+            if ($line === '') {
+                continue;
+            }
+            if (isset($line[0]) && $line[0] === '[') {
+                if ($current !== null) {
+                    $entries[] = $current;
+                }
+                $current = $line;
+            } elseif ($current !== null) {
+                $current .= "\n" . $line;
+            }
+        }
+        if ($current !== null) {
+            $entries[] = $current;
+        }
+
+        return array_reverse(array_slice($entries, -$limit));
+    }
+
+    private function hostingLogPath()
+    {
+        $configured = Configuration::get('AIBRIDGE_HOSTING_LOG_PATH');
+        if (is_string($configured) && $configured !== '' && is_readable($configured)) {
+            return $configured;
+        }
+
+        $snapshot = _PS_ROOT_DIR_ . '/var/aibridge_hosting_log_snapshot.txt';
+
+        return is_readable($snapshot) ? $snapshot : null;
+    }
+
     public function lowStockProducts($threshold = 5, $limit = 20)
     {
         $languageId = (int) Context::getContext()->language->id;
