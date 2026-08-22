@@ -94,6 +94,62 @@ class AiBridgeAnalytics
         );
     }
 
+    /**
+     * Wephone's own "wephonebackofficecolumns" module tracks real invoicing
+     * status per order (an employee manually assigns an invoice number and
+     * marks it paid) in `wephone_order_billing` — that reflects actual
+     * accounting state far better than PrestaShop's own valid/total_paid_real.
+     * Returns null when that table doesn't exist (any other install of this
+     * module), so callers can skip the section entirely.
+     */
+    public function wephoneBillingStatus($from, $to)
+    {
+        if (!$this->hasWephoneBillingTable()) {
+            return null;
+        }
+
+        $row = Db::getInstance()->getRow(
+            'SELECT
+                COALESCE(SUM(CASE WHEN wob.invoice_number IS NOT NULL AND wob.invoice_number != \'\' AND wob.payment_status = \'paid\'
+                    THEN COALESCE(wob.invoice_total, o.total_paid_tax_incl) ELSE 0 END), 0) AS paid_amount,
+                SUM(CASE WHEN wob.invoice_number IS NOT NULL AND wob.invoice_number != \'\' AND wob.payment_status = \'paid\' THEN 1 ELSE 0 END) AS paid_count,
+                COALESCE(SUM(CASE WHEN wob.invoice_number IS NOT NULL AND wob.invoice_number != \'\' AND wob.payment_status != \'paid\'
+                    THEN COALESCE(wob.invoice_total, o.total_paid_tax_incl) ELSE 0 END), 0) AS pending_amount,
+                SUM(CASE WHEN wob.invoice_number IS NOT NULL AND wob.invoice_number != \'\' AND wob.payment_status != \'paid\' THEN 1 ELSE 0 END) AS pending_count,
+                SUM(CASE WHEN wob.invoice_number IS NULL OR wob.invoice_number = \'\' THEN 1 ELSE 0 END) AS not_invoiced_count
+            FROM `' . _DB_PREFIX_ . 'orders` o
+            LEFT JOIN `' . _DB_PREFIX_ . 'wephone_order_billing` wob ON wob.id_order = o.id_order
+            WHERE o.valid = 1 AND o.date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"'
+        );
+
+        if (!is_array($row)) {
+            return null;
+        }
+
+        return array(
+            'paid_amount' => (float) $row['paid_amount'],
+            'paid_count' => (int) $row['paid_count'],
+            'pending_amount' => (float) $row['pending_amount'],
+            'pending_count' => (int) $row['pending_count'],
+            'not_invoiced_count' => (int) $row['not_invoiced_count'],
+        );
+    }
+
+    private function hasWephoneBillingTable()
+    {
+        static $exists = null;
+        if ($exists === null) {
+            // executeS(), not getValue() - PrestaShop's Db::getValue()/getRow()
+            // append "LIMIT 1" unconditionally, and "SHOW TABLES ... LIMIT 1"
+            // is invalid syntax on some MariaDB versions.
+            $exists = (bool) Db::getInstance()->executeS(
+                "SHOW TABLES LIKE '" . _DB_PREFIX_ . "wephone_order_billing'"
+            );
+        }
+
+        return $exists;
+    }
+
     public function lowStockProducts($threshold = 5, $limit = 20)
     {
         $languageId = (int) Context::getContext()->language->id;

@@ -344,6 +344,16 @@ Versión `1.20.3`. Con el update ya funcionando (sección 23), la página "AI Br
 
 Desplegado y verificado en ambos sitios (`saruia.es` y `wephone.es`) directo por FTP/SFTP, con `runUpgradeModule()` corrido a mano para mantener `ps_module.version` sincronizado — ambos quedaron limpios en `1.20.3`.
 
+## 25. Integración con "Facturación Wephone" en el área de Analítica (2026-08-22)
+
+Versión `1.20.4`. El usuario pidió que "pagados/por pagar" salga de un módulo propio que ya tiene instalado en `wephone.es` (menú Pedidos → "Facturación Wephone"), no de `total_paid_real` de PrestaShop. Investigado por FTP: es el módulo `wephonebackofficecolumns`, tabla `wephone_order_billing` (`id_order`, `invoice_number`, `payment_status` 'invoiced'|'paid', `invoice_total`, etc.) — un empleado carga manualmente el número de factura y marca cuándo se cobra. Es su fuente de verdad contable real, más precisa que el estado nativo de PrestaShop.
+
+`AiBridgeAnalytics::wephoneBillingStatus()` nuevo: `LEFT JOIN` de `orders` con `wephone_order_billing`, clasifica cada pedido en Pagado / Facturado-por-cobrar / Sin facturar (mismo criterio que usa el propio módulo Wephone: sin `invoice_number` = sin facturar; con número y `payment_status='paid'` = pagado; con número y cualquier otro estado = facturado pendiente de cobro).
+
+**Detección automática, sin romper otros sitios**: `hasWephoneBillingTable()` chequea `SHOW TABLES LIKE '...wephone_order_billing'` (vía `executeS()`, no `getValue()` — mismo cuidado de la sección 23) antes de intentar el join. Si la tabla no existe (`saruia.es`, o cualquier instalación futura sin ese módulo), `wephoneBillingStatus()` devuelve `null` y el controlador simplemente no renderiza esa sección — cero impacto en sitios sin el módulo Wephone.
+
+Probado en vivo contra `wephone.es` antes de publicar (mismo patrón de siempre: script de diagnóstico puntual, token-gated, borrado después) — datos reales: 112 pedidos pagados (24.244,05 €), 5 facturados pendientes de cobro (1.937,44 €), 196 sin facturar todavía.
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.

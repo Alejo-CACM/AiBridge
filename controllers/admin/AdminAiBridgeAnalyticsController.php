@@ -29,9 +29,11 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         $topCustomers = $analytics->topCustomers($from, $to);
         $inactiveCustomers = $analytics->inactiveCustomers(90);
         $lowStock = $analytics->lowStockProducts(5);
+        $billingStatus = $analytics->wephoneBillingStatus($from, $to);
 
         return $this->renderRangeForm($from, $to, $preset)
             . $this->renderKpiCards($kpis)
+            . ($billingStatus !== null ? $this->renderBillingStatus($billingStatus) : '')
             . $this->renderSalesByDay($salesByDay)
             . '<div class="row">'
             . '<div class="col-lg-6">' . $this->renderTopProducts($topProducts) . '</div>'
@@ -144,6 +146,34 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
                 . '</div></div>';
         }
         $html .= '</div>';
+
+        return $html;
+    }
+
+    /**
+     * Only rendered when the "wephonebackofficecolumns" module's billing
+     * table exists — reflects real accounting status (invoice issued +
+     * marked paid by an employee), not just PrestaShop's own order state.
+     */
+    private function renderBillingStatus(array $status)
+    {
+        $cards = array(
+            array('label' => 'Pagado', 'value' => $this->formatMoney($status['paid_amount']) . ' (' . $status['paid_count'] . ')', 'color' => '#5cb85c'),
+            array('label' => 'Facturado, por cobrar', 'value' => $this->formatMoney($status['pending_amount']) . ' (' . $status['pending_count'] . ')', 'color' => '#f0ad4e'),
+            array('label' => 'Sin facturar', 'value' => (string) $status['not_invoiced_count'] . ' pedidos', 'color' => '#d9534f'),
+        );
+
+        $html = '<div class="panel"><div class="panel-heading"><i class="icon-money"></i> '
+            . $this->l('Estado de facturación (Wephone)') . '</div><div class="row" style="padding:15px;">';
+
+        foreach ($cards as $card) {
+            $html .= '<div class="col-lg-4"><div style="text-align:center;padding:15px;border-left:4px solid ' . $card['color'] . ';">'
+                . '<div style="font-size:20px;font-weight:bold;">' . Tools::safeOutput($card['value']) . '</div>'
+                . '<div class="text-muted">' . Tools::safeOutput($card['label']) . '</div>'
+                . '</div></div>';
+        }
+
+        $html .= '</div></div>';
 
         return $html;
     }
