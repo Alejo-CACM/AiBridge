@@ -23,10 +23,15 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         list($from, $to, $preset) = $this->resolveRange();
         $analytics = new AiBridgeAnalytics();
 
+        $productsLimit = $this->resolveLimit('products_limit');
+        $brandsLimit = $this->resolveLimit('brands_limit');
+        $customersLimit = $this->resolveLimit('customers_limit');
+
         $kpis = $analytics->kpis($from, $to);
         $salesByDay = $analytics->salesByDay($from, $to);
-        $topProducts = $analytics->topProducts($from, $to);
-        $topCustomers = $analytics->topCustomers($from, $to);
+        $topProducts = $analytics->topProducts($from, $to, $productsLimit);
+        $topBrands = $analytics->topBrands($from, $to, $brandsLimit);
+        $topCustomers = $analytics->topCustomers($from, $to, $customersLimit);
         $inactiveCustomers = $analytics->inactiveCustomers(90);
         $lowStock = $analytics->lowStockProducts(5);
         $billingStatus = $analytics->wephoneBillingStatus($from, $to);
@@ -36,13 +41,62 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
             . $this->renderKpiCards($kpis)
             . $this->renderSalesByDay($salesByDay)
             . '<div class="row">'
-            . '<div class="col-lg-6">' . $this->renderTopProducts($topProducts) . '</div>'
-            . '<div class="col-lg-6">' . $this->renderTopCustomers($topCustomers) . '</div>'
+            . '<div class="col-lg-6">' . $this->renderTopProducts($topProducts, $productsLimit) . '</div>'
+            . '<div class="col-lg-6">' . $this->renderTopBrands($topBrands, $brandsLimit) . '</div>'
             . '</div>'
             . '<div class="row">'
+            . '<div class="col-lg-6">' . $this->renderTopCustomers($topCustomers, $customersLimit) . '</div>'
             . '<div class="col-lg-6">' . $this->renderInactiveCustomers($inactiveCustomers) . '</div>'
-            . '<div class="col-lg-6">' . $this->renderLowStock($lowStock) . '</div>'
-            . '</div>';
+            . '</div>'
+            . $this->renderLowStock($lowStock);
+    }
+
+    /**
+     * Shared "how many rows" control for the top-N panels — kept out of
+     * resolveRange() since it has nothing to do with the date range.
+     */
+    private function resolveLimit($paramName, $default = 10)
+    {
+        $allowed = array(10, 25, 50, 100);
+        $value = (int) Tools::getValue($paramName, $default);
+
+        return in_array($value, $allowed, true) ? $value : $default;
+    }
+
+    private function renderLimitSelect($paramName, $current)
+    {
+        $options = array(10, 25, 50, 100);
+        $html = '<select onchange="this.form.submit()" name="' . $paramName . '" class="form-control" style="display:inline-block;width:auto;">';
+        foreach ($options as $option) {
+            $selected = $option === $current ? ' selected="selected"' : '';
+            $html .= '<option value="' . $option . '"' . $selected . '>Top ' . $option . '</option>';
+        }
+        $html .= '</select>';
+
+        return $html;
+    }
+
+    /**
+     * Wraps a limit <select> in a form that resubmits the whole page with
+     * every other GET param preserved as hidden fields, so changing "Top N"
+     * on one panel doesn't reset the date range or the other panels' limits.
+     */
+    private function limitForm($paramName, $current)
+    {
+        $preserved = $_GET;
+        unset($preserved[$paramName], $preserved['controller'], $preserved['token']);
+
+        $html = '<form method="get" style="display:inline-block;float:right;">'
+            . '<input type="hidden" name="controller" value="AdminAiBridgeAnalytics" />'
+            . '<input type="hidden" name="token" value="' . Tools::safeOutput($this->token) . '" />';
+        foreach ($preserved as $key => $value) {
+            if (is_scalar($value)) {
+                $html .= '<input type="hidden" name="' . Tools::safeOutput($key) . '" value="' . Tools::safeOutput((string) $value) . '" />';
+            }
+        }
+        $html .= $this->renderLimitSelect($paramName, $current) . '</form>';
+
+        return $html;
     }
 
     private function resolveRange()
@@ -224,10 +278,10 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         return $html;
     }
 
-    private function renderTopProducts(array $rows)
+    private function renderTopProducts(array $rows, $limit)
     {
         $html = '<div class="panel"><div class="panel-heading"><i class="icon-cubes"></i> '
-            . $this->l('Productos más vendidos') . '</div>';
+            . $this->l('Productos más vendidos') . $this->limitForm('products_limit', $limit) . '</div>';
 
         if (!$rows) {
             return $html . '<p class="help-block" style="padding:15px;">' . $this->l('Sin datos en este período.') . '</p></div>';
@@ -252,10 +306,38 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         return $html;
     }
 
-    private function renderTopCustomers(array $rows)
+    private function renderTopBrands(array $rows, $limit)
+    {
+        $html = '<div class="panel"><div class="panel-heading"><i class="icon-tags"></i> '
+            . $this->l('Marcas más vendidas') . $this->limitForm('brands_limit', $limit) . '</div>';
+
+        if (!$rows) {
+            return $html . '<p class="help-block" style="padding:15px;">' . $this->l('Sin datos en este período.') . '</p></div>';
+        }
+
+        $html .= '<table class="table"><thead><tr>'
+            . '<th>' . $this->l('Marca') . '</th>'
+            . '<th>' . $this->l('Cantidad') . '</th>'
+            . '<th>' . $this->l('Ingresos') . '</th>'
+            . '</tr></thead><tbody>';
+
+        foreach ($rows as $row) {
+            $editUrl = $this->context->link->getAdminLink('AdminManufacturers') . '&id_manufacturer=' . (int) $row['id_manufacturer'] . '&updatemanufacturer';
+            $html .= '<tr><td><a href="' . Tools::safeOutput($editUrl) . '">' . Tools::safeOutput((string) $row['manufacturer_name']) . '</a></td>'
+                . '<td>' . (int) $row['qty_sold'] . '</td>'
+                . '<td>' . $this->formatMoney((float) $row['revenue']) . '</td>'
+                . '</tr>';
+        }
+
+        $html .= '</tbody></table></div>';
+
+        return $html;
+    }
+
+    private function renderTopCustomers(array $rows, $limit)
     {
         $html = '<div class="panel"><div class="panel-heading"><i class="icon-user"></i> '
-            . $this->l('Clientes top') . '</div>';
+            . $this->l('Clientes top') . $this->limitForm('customers_limit', $limit) . '</div>';
 
         if (!$rows) {
             return $html . '<p class="help-block" style="padding:15px;">' . $this->l('Sin datos en este período.') . '</p></div>';

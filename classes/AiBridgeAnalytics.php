@@ -99,6 +99,30 @@ class AiBridgeAnalytics
         );
     }
 
+    /**
+     * Same order/date scope as topProducts(), grouped by manufacturer
+     * instead. Products with no brand assigned (id_manufacturer = 0) or
+     * whose product row was deleted after the sale are not attributable to
+     * any brand and are excluded — INNER JOIN is intentional here.
+     */
+    public function topBrands($from, $to, $limit = 10)
+    {
+        return (array) Db::getInstance()->executeS(
+            'SELECT m.id_manufacturer, m.name AS manufacturer_name,
+                SUM(od.product_quantity) AS qty_sold,
+                SUM(od.total_price_tax_incl) AS revenue
+            FROM `' . _DB_PREFIX_ . 'order_detail` od
+            INNER JOIN `' . _DB_PREFIX_ . 'orders` o ON o.id_order = od.id_order
+            INNER JOIN `' . _DB_PREFIX_ . 'product` p ON p.id_product = od.product_id
+            INNER JOIN `' . _DB_PREFIX_ . 'manufacturer` m ON m.id_manufacturer = p.id_manufacturer
+            WHERE ' . $this->excludeCancelledSql('o') . '
+                AND o.date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"
+            GROUP BY m.id_manufacturer
+            ORDER BY qty_sold DESC
+            LIMIT ' . (int) $limit
+        );
+    }
+
     public function topCustomers($from, $to, $limit = 10)
     {
         return (array) Db::getInstance()->executeS(
