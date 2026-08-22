@@ -160,6 +160,9 @@ class AiBridgeSelfUpdater
             }
         } catch (\Throwable $exception) {
             $log[] = 'Error ejecutando la actualización: ' . $exception->getMessage() . ' — restaurando respaldo.';
+            $log[] = 'Diagnóstico: ' . get_class($exception) . ' en ' . $exception->getFile() . ':' . $exception->getLine();
+            $traceLines = explode("\n", $exception->getTraceAsString());
+            $log[] = 'Traza: ' . implode(' <- ', array_slice($traceLines, 0, 6));
             $this->swapBack($liveModuleDir, $backupDir, $log);
 
             return false;
