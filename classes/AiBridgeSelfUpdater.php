@@ -112,25 +112,30 @@ class AiBridgeSelfUpdater
 
         $liveModuleDir = rtrim(_PS_MODULE_DIR_, '/\\') . DIRECTORY_SEPARATOR . 'aibridge';
         $backupDir = rtrim(_PS_MODULE_DIR_, '/\\') . DIRECTORY_SEPARATOR . 'aibridge_backup_' . date('YmdHis');
+        $stagedSiblingDir = rtrim(_PS_MODULE_DIR_, '/\\') . DIRECTORY_SEPARATOR . 'aibridge_incoming_' . bin2hex(random_bytes(4));
 
-        if (!$this->copyDirectory($liveModuleDir, $backupDir, $log)) {
+        // Stage the new version as a sibling of the live module dir first,
+        // on the SAME filesystem as _PS_MODULE_DIR_. This copy can safely
+        // fail (the live dir is never touched here) — the only step that
+        // touches the live dir afterwards is an atomic rename(), never a
+        // delete-then-copy, which is what used to leave the module with no
+        // live directory at all if the copy back failed partway.
+        if (!$this->copyDirectory($stagedModuleDir, $stagedSiblingDir, $log)) {
             Tools::deleteDirectory($extractDir);
-            Tools::deleteDirectory($backupDir);
-            $log[] = 'No se pudo crear el respaldo antes de actualizar. Actualización cancelada por seguridad — no se tocó ningún archivo en vivo.';
-
-            return false;
-        }
-        $log[] = 'Respaldo creado: ' . basename($backupDir) . '.';
-
-        if (!$this->copyDirectory($stagedModuleDir, $liveModuleDir, $log)) {
-            $log[] = 'Falló la copia de los archivos nuevos — restaurando respaldo.';
-            $this->restoreBackup($liveModuleDir, $backupDir, $log);
-            Tools::deleteDirectory($extractDir);
+            Tools::deleteDirectory($stagedSiblingDir);
+            $log[] = 'No se pudo preparar la nueva versión. Actualización cancelada — no se tocó ningún archivo en vivo.';
 
             return false;
         }
         Tools::deleteDirectory($extractDir);
-        $log[] = 'Archivos del módulo reemplazados.';
+        $log[] = 'Nueva versión preparada junto a la carpeta en vivo.';
+
+        if (!$this->swapDirectories($liveModuleDir, $stagedSiblingDir, $backupDir, $log)) {
+            Tools::deleteDirectory($stagedSiblingDir);
+
+            return false;
+        }
+        $log[] = 'Archivos del módulo reemplazados (respaldo: ' . basename($backupDir) . ').';
 
         try {
             $module = Module::getInstanceByName('aibridge');
@@ -144,7 +149,7 @@ class AiBridgeSelfUpdater
                     $log[] = 'Falló un script de actualización de base de datos (versión '
                         . (isset($result['version_fail']) ? $result['version_fail'] : '?')
                         . ') — restaurando respaldo.';
-                    $this->restoreBackup($liveModuleDir, $backupDir, $log);
+                    $this->swapBack($liveModuleDir, $backupDir, $log);
 
                     return false;
                 }
@@ -155,7 +160,7 @@ class AiBridgeSelfUpdater
             }
         } catch (\Throwable $exception) {
             $log[] = 'Error ejecutando la actualización: ' . $exception->getMessage() . ' — restaurando respaldo.';
-            $this->restoreBackup($liveModuleDir, $backupDir, $log);
+            $this->swapBack($liveModuleDir, $backupDir, $log);
 
             return false;
         }
@@ -170,14 +175,53 @@ class AiBridgeSelfUpdater
         return true;
     }
 
-    private function restoreBackup($liveModuleDir, $backupDir, array &$log)
+    /**
+     * Moves the current live dir aside (becomes the backup) and moves the
+     * already-verified staged copy into its place — two rename()s, both on
+     * the same filesystem as _PS_MODULE_DIR_, so each one is atomic and
+     * near-instant. If the second rename fails, the first is undone so the
+     * live dir is never left missing.
+     */
+    private function swapDirectories($liveModuleDir, $stagedSiblingDir, $backupDir, array &$log)
     {
-        Tools::deleteDirectory($liveModuleDir);
-        if ($this->copyDirectory($backupDir, $liveModuleDir, $log)) {
-            $log[] = 'Respaldo restaurado correctamente. El módulo sigue en la versión anterior.';
+        if (is_dir($liveModuleDir) && !@rename($liveModuleDir, $backupDir)) {
+            $log[] = 'No se pudo mover la carpeta en vivo a un respaldo. Actualización cancelada — no se tocó ningún archivo en vivo.';
+
+            return false;
+        }
+
+        if (@rename($stagedSiblingDir, $liveModuleDir)) {
+            return true;
+        }
+
+        $log[] = 'No se pudo activar la nueva versión — revirtiendo.';
+
+        if (is_dir($backupDir) && !@rename($backupDir, $liveModuleDir)) {
+            $log[] = 'ATENCIÓN: no se pudo revertir automáticamente. La carpeta en vivo puede faltar — revisa manualmente '
+                . basename($backupDir) . ' en el directorio de módulos y renómbrala a "aibridge".';
         } else {
-            $log[] = 'ATENCIÓN: el respaldo no pudo restaurarse automáticamente. Revisa manualmente la carpeta '
-                . basename($backupDir) . ' en el directorio de módulos.';
+            $log[] = 'Reversión automática correcta. El módulo sigue en la versión anterior.';
+        }
+
+        return false;
+    }
+
+    private function swapBack($liveModuleDir, $backupDir, array &$log)
+    {
+        $failedDir = $liveModuleDir . '_failed_' . bin2hex(random_bytes(4));
+
+        if (is_dir($liveModuleDir) && !@rename($liveModuleDir, $failedDir)) {
+            $log[] = 'ATENCIÓN: no se pudo apartar la versión fallida. Revisa manualmente el directorio de módulos.';
+
+            return;
+        }
+
+        if (@rename($backupDir, $liveModuleDir)) {
+            $log[] = 'Respaldo restaurado correctamente. El módulo sigue en la versión anterior (la versión fallida quedó en '
+                . basename($failedDir) . ' para inspección).';
+        } else {
+            $log[] = 'ATENCIÓN: el respaldo no pudo restaurarse automáticamente. Revisa manualmente las carpetas '
+                . basename($failedDir) . ' y ' . basename($backupDir) . ' en el directorio de módulos.';
         }
     }
 

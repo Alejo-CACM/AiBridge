@@ -287,6 +287,21 @@ Versión `1.19.0`. Se implementó la pieza que la sección 17 dejó pendiente: e
 * **Historiales múltiples por empleado** (la otra mitad de la sección 17) sigue sin implementar — se mantiene una sola conversación por empleado que se sobrescribe.
 * Tabla `aibridge_ai_provider` se crea tanto en `sql/install.php` (instalación nueva) como en `upgrade-1.19.0.php` (upgrade normal) y de forma defensiva en `ensureChatWidgetInstalled()` (deploy FTP sin upgrade automático), siguiendo el mismo patrón ya usado para las demás tablas del módulo.
 
+## 20. Bug real del auto-updater encontrado en producción (`wephone.es`) y corregido (2026-08-22)
+
+Versión `1.19.2`. Se confirmó en vivo, en el sitio de producción real (`wephone.es`, no `saruia.es` — primera vez que se dieron accesos a ese servidor), el riesgo que ya se sospechaba desde la sección 11.7 del `HANDOFF.md`: `restoreBackup()` hacía `Tools::deleteDirectory($liveModuleDir)` y DESPUÉS `copyDirectory($backupDir, $liveModuleDir)` — si esa segunda copia fallaba (recurseCopy no es confiable, ver bug ya documentado), la carpeta `aibridge` quedaba **completamente vacía/inexistente**, causando "Módulo no encontrado" en todo el Back Office. Pasó dos veces seguidas (`aibridge_backup_20260822134033` y `aibridge_backup_20260822135200` quedaron huérfanos sin ningún `aibridge` en vivo).
+
+**Recuperación manual en caliente**: con acceso SFTP directo al servidor (Plesk, `82.223.0.121`), se restauró renombrando el backup más reciente de vuelta a `aibridge` (`rename` atómico vía comando `-Q` de curl SFTP) — la carpeta volvió a responder inmediatamente.
+
+**Hallazgo de seguridad aparte, ya resuelto**: esa carpeta en `wephone.es` era una copia cruda de la carpeta local completa (el usuario confirmó: zipeó la carpeta local entera a mano para ese deploy, no usó `scripts/build_release.ps1`), incluyendo `HANDOFF.md` con las credenciales de `saruia.es` en texto plano — y estaba **públicamente descargable** (HTTP 200 en `/modules/aibridge/HANDOFF.md`). Se borró del servidor de inmediato; un proxy/caché intermedio lo sirvió en caché un rato más incluso después de borrado en origen. Se le recomendó al usuario rotar contraseña de Back Office, FTP, y token API de `saruia.es` por precaución. `.git` no estaba expuesto (403 del servidor). **Lección para futuros deploys manuales: usar siempre el zip generado por `scripts/build_release.ps1` (excluye `HANDOFF.md`, `.git`, `dist`, `graphify-out`, `scripts`), nunca comprimir la carpeta local completa a mano.**
+
+**Fix real en `classes/AiBridgeSelfUpdater.php`**: reemplazado el patrón borrar-en-vivo-y-copiar-de-vuelta por un swap con `rename()` atómico, exactamente lo mismo que la recuperación manual que funcionó:
+1. La versión nueva se copia primero a una carpeta hermana (`aibridge_incoming_<random>`) — si esta copia falla, la carpeta en vivo nunca se tocó.
+2. `swapDirectories()`: `rename(aibridge, aibridge_backup_<timestamp>)` y `rename(aibridge_incoming_X, aibridge)` — dos renames en el mismo filesystem, no una copia recursiva. Si el segundo rename falla, se deshace el primero automáticamente.
+3. Si falla el paso de base de datos después del swap, `swapBack()` aparta la versión fallida (`aibridge_failed_<random>`, queda para inspección) y renombra el respaldo de vuelta a `aibridge` — nunca queda sin carpeta en vivo.
+
+`copyDirectory()` (con su limitación conocida de `Tools::recurseCopy()`) ahora solo se usa para el paso que puede fallar sin consecuencias (copiar a la carpeta hermana antes de tocar nada en vivo) — ya no está en la ruta crítica de reemplazo ni de rollback.
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.
