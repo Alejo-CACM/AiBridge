@@ -1,0 +1,5 @@
+<?php
+function upgrade_module_1_0_1($module)
+{
+ return Db::getInstance()->execute('CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'aibridge_approval_request` (`id_aibridge_approval_request` INT UNSIGNED NOT NULL AUTO_INCREMENT, `uuid` CHAR(64) NOT NULL, `status` VARCHAR(16) NOT NULL, `product_id` INT UNSIGNED NOT NULL, `shop_id` INT UNSIGNED NOT NULL, `language_id` INT UNSIGNED NOT NULL, `payload_json` LONGTEXT NOT NULL, `diff_json` LONGTEXT NOT NULL, `payload_hash` CHAR(64) NOT NULL, `product_date_upd_snapshot` DATETIME NULL, `created_by_employee_id` INT UNSIGNED NULL, `created_at` DATETIME NOT NULL, `expires_at` DATETIME NOT NULL, `approved_by_employee_id` INT UNSIGNED NULL, `approved_at` DATETIME NULL, `rejected_by_employee_id` INT UNSIGNED NULL, `rejected_at` DATETIME NULL, `consumed_at` DATETIME NULL, PRIMARY KEY (`id_aibridge_approval_request`), UNIQUE KEY `uuid` (`uuid`), KEY `status_expires` (`status`,`expires_at`)) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4');
+}
