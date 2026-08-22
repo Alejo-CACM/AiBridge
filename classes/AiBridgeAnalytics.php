@@ -8,14 +8,53 @@
  */
 class AiBridgeAnalytics
 {
+    /**
+     * "Pedidos entrados" per the store owner's own definition: every order
+     * in range counts regardless of payment/valid status — the only ones
+     * excluded are whichever order state's name contains "cancel" (looked
+     * up dynamically, since state naming/ids can be customized per store).
+     * This intentionally does NOT use PrestaShop's own `valid` flag, which
+     * excludes plenty of real orders (e.g. awaiting bank wire) that the
+     * store still counts as "entered".
+     */
+    private function excludeCancelledSql($alias = 'o')
+    {
+        $cancelledIds = $this->cancelledStateIds();
+
+        if (!$cancelledIds) {
+            return '1 = 1';
+        }
+
+        return $alias . '.current_state NOT IN (' . implode(',', $cancelledIds) . ')';
+    }
+
+    private function cancelledStateIds()
+    {
+        static $ids = null;
+        if ($ids === null) {
+            $languageId = (int) Context::getContext()->language->id;
+            $rows = Db::getInstance()->executeS(
+                'SELECT DISTINCT id_order_state FROM `' . _DB_PREFIX_ . 'order_state_lang`
+                WHERE id_lang = ' . $languageId . ' AND name LIKE "%cancel%"'
+            );
+            $ids = array();
+            foreach (is_array($rows) ? $rows : array() as $row) {
+                $ids[] = (int) $row['id_order_state'];
+            }
+        }
+
+        return $ids;
+    }
+
     public function kpis($from, $to)
     {
         $row = Db::getInstance()->getRow(
             'SELECT COUNT(*) AS orders_count,
-                COALESCE(SUM(total_paid_real / NULLIF(conversion_rate, 0)), 0) AS revenue,
-                COALESCE(AVG(total_paid_real / NULLIF(conversion_rate, 0)), 0) AS avg_order
-            FROM `' . _DB_PREFIX_ . 'orders`
-            WHERE valid = 1 AND date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"'
+                COALESCE(SUM(total_paid_tax_incl / NULLIF(conversion_rate, 0)), 0) AS revenue,
+                COALESCE(AVG(total_paid_tax_incl / NULLIF(conversion_rate, 0)), 0) AS avg_order
+            FROM `' . _DB_PREFIX_ . 'orders` o
+            WHERE ' . $this->excludeCancelledSql('o') . '
+                AND date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"'
         );
 
         $newCustomers = (int) Db::getInstance()->getValue(
@@ -35,9 +74,10 @@ class AiBridgeAnalytics
     {
         return (array) Db::getInstance()->executeS(
             'SELECT DATE(date_add) AS d, COUNT(*) AS orders_count,
-                COALESCE(SUM(total_paid_real / NULLIF(conversion_rate, 0)), 0) AS revenue
-            FROM `' . _DB_PREFIX_ . 'orders`
-            WHERE valid = 1 AND date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"
+                COALESCE(SUM(total_paid_tax_incl / NULLIF(conversion_rate, 0)), 0) AS revenue
+            FROM `' . _DB_PREFIX_ . 'orders` o
+            WHERE ' . $this->excludeCancelledSql('o') . '
+                AND date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"
             GROUP BY DATE(date_add)
             ORDER BY d ASC'
         );
@@ -51,7 +91,8 @@ class AiBridgeAnalytics
                 SUM(od.total_price_tax_incl) AS revenue
             FROM `' . _DB_PREFIX_ . 'order_detail` od
             INNER JOIN `' . _DB_PREFIX_ . 'orders` o ON o.id_order = od.id_order
-            WHERE o.valid = 1 AND o.date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"
+            WHERE ' . $this->excludeCancelledSql('o') . '
+                AND o.date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"
             GROUP BY od.product_id
             ORDER BY qty_sold DESC
             LIMIT ' . (int) $limit
@@ -63,10 +104,11 @@ class AiBridgeAnalytics
         return (array) Db::getInstance()->executeS(
             'SELECT o.id_customer, c.firstname, c.lastname, c.email,
                 COUNT(*) AS orders_count,
-                COALESCE(SUM(o.total_paid_real / NULLIF(o.conversion_rate, 0)), 0) AS spent
+                COALESCE(SUM(o.total_paid_tax_incl / NULLIF(o.conversion_rate, 0)), 0) AS spent
             FROM `' . _DB_PREFIX_ . 'orders` o
             INNER JOIN `' . _DB_PREFIX_ . 'customer` c ON c.id_customer = o.id_customer
-            WHERE o.valid = 1 AND o.date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"
+            WHERE ' . $this->excludeCancelledSql('o') . '
+                AND o.date_add BETWEEN "' . pSQL($from) . ' 00:00:00" AND "' . pSQL($to) . ' 23:59:59"
             GROUP BY o.id_customer
             ORDER BY spent DESC
             LIMIT ' . (int) $limit
@@ -74,8 +116,8 @@ class AiBridgeAnalytics
     }
 
     /**
-     * Customers who have at least one valid order, but nothing in the last
-     * $days days — a win-back list, not "never purchased" customers.
+     * Customers who have at least one non-cancelled order, but nothing in
+     * the last $days days — a win-back list, not "never purchased" customers.
      */
     public function inactiveCustomers($days = 90, $limit = 50)
     {
@@ -85,7 +127,8 @@ class AiBridgeAnalytics
                 COUNT(o.id_order) AS orders_total,
                 DATEDIFF(NOW(), MAX(o.date_add)) AS days_inactive
             FROM `' . _DB_PREFIX_ . 'customer` c
-            INNER JOIN `' . _DB_PREFIX_ . 'orders` o ON o.id_customer = c.id_customer AND o.valid = 1
+            INNER JOIN `' . _DB_PREFIX_ . 'orders` o ON o.id_customer = c.id_customer
+                AND ' . $this->excludeCancelledSql('o') . '
             WHERE c.deleted = 0
             GROUP BY c.id_customer
             HAVING MAX(o.date_add) < DATE_SUB(NOW(), INTERVAL ' . (int) $days . ' DAY)

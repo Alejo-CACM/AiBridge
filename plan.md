@@ -354,6 +354,15 @@ Versión `1.20.4`. El usuario pidió que "pagados/por pagar" salga de un módulo
 
 Probado en vivo contra `wephone.es` antes de publicar (mismo patrón de siempre: script de diagnóstico puntual, token-gated, borrado después) — datos reales: 112 pedidos pagados (24.244,05 €), 5 facturados pendientes de cobro (1.937,44 €), 196 sin facturar todavía.
 
+## 26. Dos áreas separadas en Analítica: facturación real vs. volumen de pedidos (2026-08-22)
+
+Versión `1.20.5`. Ajuste pedido tras revisar la sección 25 en vivo: el usuario quiere el reporte en dos áreas conceptualmente distintas, no mezcladas.
+
+* **Área 1 (arriba, ya validada)**: "Estado de facturación (Wephone)" — depende de si está pagado o no, fuente = `wephone_order_billing`. Sin cambios.
+* **Área 2 (nueva, debajo)**: "Pedidos (PrestaShop)" — **todos** los pedidos entrados en el rango, sin importar si están pagados, excluyendo únicamente los que estén en un estado cuyo nombre contenga "cancel". Reemplaza el filtro anterior `valid = 1` (que excluía pedidos reales como "esperando transferencia") por `current_state NOT IN (<ids de estados que contienen "cancel">)`, resuelto dinámicamente vía `order_state_lang` (no hardcodeado, porque los ids de estado pueden variar entre tiendas). También se cambió `total_paid_real` por `total_paid_tax_incl` en `kpis()`, `salesByDay()`, `topProducts()`, `topCustomers()` e `inactiveCustomers()` — el valor del pedido, no lo efectivamente cobrado, ya que esta área no debe depender del estado de pago.
+
+Verificado en vivo en `wephone.es`: pedidos pasó de 230 (con `valid=1`) a 339 (todos menos cancelados) en el mismo rango de 30 días — la diferencia son pedidos reales que antes se perdían por el filtro `valid`.
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.

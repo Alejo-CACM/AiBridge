@@ -32,8 +32,8 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         $billingStatus = $analytics->wephoneBillingStatus($from, $to);
 
         return $this->renderRangeForm($from, $to, $preset)
-            . $this->renderKpiCards($kpis)
             . ($billingStatus !== null ? $this->renderBillingStatus($billingStatus) : '')
+            . $this->renderKpiCards($kpis)
             . $this->renderSalesByDay($salesByDay)
             . '<div class="row">'
             . '<div class="col-lg-6">' . $this->renderTopProducts($topProducts) . '</div>'
@@ -129,6 +129,14 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         return $html;
     }
 
+    /**
+     * All orders entered in range regardless of payment status — the only
+     * ones excluded are whichever state's name contains "cancel"
+     * (AiBridgeAnalytics::excludeCancelledSql()). Deliberately independent
+     * from the Wephone billing panel above: that one is about money
+     * actually collected, this one is about order volume as PrestaShop's
+     * own Orders screen would show it.
+     */
     private function renderKpiCards(array $kpis)
     {
         $cards = array(
@@ -138,14 +146,18 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
             array('label' => 'Clientes nuevos', 'value' => (string) $kpis['new_customers']),
         );
 
-        $html = '<div class="row">';
+        $html = '<div class="panel"><div class="panel-heading"><i class="icon-shopping-cart"></i> '
+            . $this->l('Pedidos (PrestaShop)') . '</div>'
+            . '<p class="help-block" style="padding:0 15px;">'
+            . $this->l('Todos los pedidos del período, sin importar si están pagados — excluye solo los cancelados.')
+            . '</p><div class="row" style="padding:0 15px 15px;">';
         foreach ($cards as $card) {
-            $html .= '<div class="col-lg-3 col-md-6"><div class="panel" style="text-align:center;padding:20px;">'
+            $html .= '<div class="col-lg-3 col-md-6" style="text-align:center;padding:15px;">'
                 . '<div style="font-size:26px;font-weight:bold;">' . Tools::safeOutput($card['value']) . '</div>'
                 . '<div class="text-muted">' . Tools::safeOutput($card['label']) . '</div>'
-                . '</div></div>';
+                . '</div>';
         }
-        $html .= '</div>';
+        $html .= '</div></div>';
 
         return $html;
     }
