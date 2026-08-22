@@ -314,6 +314,14 @@ Recuperado igual que la vez anterior: `rename` del backup más reciente de vuelt
 
 **Pendiente**: limpiar `HANDOFF.md`, `.git`, `dist`, `graphify-out`, `scripts` de `wephone.es` de forma definitiva (el deploy directo de esta sección sube solo el contenido limpio del módulo, así que esto debería quedar resuelto una vez confirmado).
 
+## 22. Área de Analítica (2026-08-22, COMPLETADO)
+
+Versión `1.20.0`. Nuevo tab top-level "AI Bridge Analítica" (`AdminAiBridgeAnalyticsController` + `classes/AiBridgeAnalytics.php`, consultas SQL directas sobre `orders`/`order_detail`/`customer`/`stock_available`, sin cargar ObjectModels completos). Selector de rango (hoy / 7 días / 30 días / este mes / mes pasado / personalizado). Incluye lo pedido — ventas por fecha (tabla + barra), pedidos, productos más vendidos, clientes top — más lo que se ofreció de más: KPIs (ticket promedio, clientes nuevos), clientes inactivos 90+ días (lista de win-back), y stock bajo/agotado (bonus, útil para un módulo de catálogo).
+
+Patrón nuevo en este módulo: controlador admin sin `$this->table`/`$this->className` (no es un CRUD de ObjectModel) — se sobrescribe `renderList()` completo sin llamar a `parent::renderList()`, evitando toda la maquinaria de `HelperList` que asume una tabla real.
+
+**Validado en vivo contra `saruia.es`** antes de publicar: se subieron los archivos por FTP y se corrió un script de diagnóstico puntual (mismo patrón que otras veces — token-gated, bootstrap de PrestaShop, borrado después) que ejecutó las 6 consultas directamente y devolvió JSON real. Encontró y corrigió un error real: `od.total_paid_tax_incl` no existe en `ps_order_detail`, la columna correcta es `total_price_tax_incl`. De paso reveló datos reales interesantes del sitio de pruebas: hay productos con stock **negativo** (sobre-vendidos), que la consulta de stock bajo ya captura correctamente.
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.

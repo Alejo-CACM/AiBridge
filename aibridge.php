@@ -20,7 +20,7 @@ class AiBridge extends Module
     {
         $this->name = 'aibridge';
         $this->tab = 'administration';
-        $this->version = '1.19.3';
+        $this->version = '1.20.0';
         $this->author = 'Proyecto profesional';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -362,6 +362,7 @@ class AiBridge extends Module
 
         $this->installChatTab();
         $this->installAiProvidersTab();
+        $this->installAnalyticsTab();
         $this->registerHook('displayBackOfficeHeader');
 
         if ($this->hasValidApiToken()) {
@@ -407,6 +408,7 @@ $uploadsDeleted = (bool) include __DIR__ . '/sql/uninstall.php';
         $this->uninstallApprovalsTab();
         $this->uninstallChatTab();
         $this->uninstallAiProvidersTab();
+        $this->uninstallAnalyticsTab();
 
         $moduleUninstalled = parent::uninstall();
 
@@ -612,6 +614,43 @@ $uploadsDeleted = (bool) include __DIR__ . '/sql/uninstall.php';
         $id = (int) Tab::getIdFromClassName('AdminAiBridgeAiProviders'); if (!$id) { return true; } return (new Tab($id))->delete();
     }
 
+    public function installAnalyticsTab()
+    {
+        if ((int) Tab::getIdFromClassName('AdminAiBridgeAnalytics')) {
+            return true;
+        }
+
+        $parentId = (int) Tab::getIdFromClassName('AdminParentModulesSf');
+
+        if (!$parentId) {
+            PrestaShopLogger::addLog('AI Bridge analytics tab parent was not found.', 3);
+
+            return false;
+        }
+
+        $tab = new Tab();
+        $tab->class_name = 'AdminAiBridgeAnalytics';
+        $tab->module = $this->name;
+        $tab->id_parent = $parentId;
+
+        foreach (Language::getLanguages(false) as $language) {
+            $tab->name[(int) $language['id_lang']] = 'AI Bridge Analítica';
+        }
+
+        if (!$tab->add()) {
+            PrestaShopLogger::addLog('AI Bridge analytics tab could not be created.', 3);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private function uninstallAnalyticsTab()
+    {
+        $id = (int) Tab::getIdFromClassName('AdminAiBridgeAnalytics'); if (!$id) { return true; } return (new Tab($id))->delete();
+    }
+
     /**
      * Self-healing bootstrap: this module is deployed to saruia.es by
      * copying files over FTP, not through PrestaShop's module upgrade flow,
@@ -625,6 +664,7 @@ $uploadsDeleted = (bool) include __DIR__ . '/sql/uninstall.php';
         try {
             $this->installChatTab();
             $this->installAiProvidersTab();
+            $this->installAnalyticsTab();
             $this->registerHook('displayBackOfficeHeader');
             Db::getInstance()->execute(
                 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'aibridge_ai_provider` (
