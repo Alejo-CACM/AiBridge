@@ -302,6 +302,18 @@ Versión `1.19.2`. Se confirmó en vivo, en el sitio de producción real (`wepho
 
 `copyDirectory()` (con su limitación conocida de `Tools::recurseCopy()`) ahora solo se usa para el paso que puede fallar sin consecuencias (copiar a la carpeta hermana antes de tocar nada en vivo) — ya no está en la ruta crítica de reemplazo ni de rollback.
 
+## 21. Segundo fallo real en el mismo update, causa distinta (2026-08-22)
+
+Versión `1.19.3`. El intento de actualizar `wephone.es` a `1.19.2` volvió a dejar la carpeta `aibridge` inexistente — pero esta vez la causa fue otra, y confirma que el fix de la sección 20 sirve pero llega un release tarde (el propio auto-updater ejecuta con el código VIEJO todavía en vivo hasta que la actualización nueva ya está instalada — problema del huevo y la gallina inherente a cualquier self-updater).
+
+Log real capturado: `SQLSTATE[42000]: Syntax error ... near 'LIMIT 1' at line 1`, durante `runUpgradeModule()`, específicamente en `upgrade_module_1_19_1` → `installAiProvidersTab()` → reparentar el tab existente con `Tab->save()`. La clase `Tab` de PrestaShop tiene lógica propia de recálculo de posiciones al hacer update/save que en el MariaDB de `wephone.es` genera una consulta mal formada. **Fix**: reemplazado `$tab->save()` por un `UPDATE` directo de `id_parent` vía `Db::getInstance()->execute()`, envuelto en try/catch — reparentar un tab es cosmético, nunca debe poder abortar una actualización.
+
+Recuperado igual que la vez anterior: `rename` del backup más reciente de vuelta a `aibridge` vía SFTP. El `HANDOFF.md` volvió a aparecer expuesto (viene arrastrado en cada backup, porque el backup es una copia byte-a-byte de lo que estaba en vivo, que a su vez viene de aquel primer deploy manual con la carpeta completa) — borrado de nuevo.
+
+**Decisión para este caso**: en vez de arriesgar un tercer intento con el auto-updater (que solo se auto-repara recién en el PRÓXIMO release después de que uno se instale limpio), se desplegó `1.19.3` directo por SFTP a `wephone.es`, sin pasar por `AiBridgeSelfUpdater`. `ensureChatWidgetInstalled()` (que corre en cada carga de la página Configurar) se encarga de crear/reparentar el tab y la tabla `aibridge_ai_provider` igual, sin depender de `runUpgradeModule()`.
+
+**Pendiente**: limpiar `HANDOFF.md`, `.git`, `dist`, `graphify-out`, `scripts` de `wephone.es` de forma definitiva (el deploy directo de esta sección sube solo el contenido limpio del módulo, así que esto debería quedar resuelto una vez confirmado).
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.

@@ -20,7 +20,7 @@ class AiBridge extends Module
     {
         $this->name = 'aibridge';
         $this->tab = 'administration';
-        $this->version = '1.19.2';
+        $this->version = '1.19.3';
         $this->author = 'Proyecto profesional';
         $this->need_instance = 0;
         $this->bootstrap = true;
@@ -572,10 +572,18 @@ $uploadsDeleted = (bool) include __DIR__ . '/sql/uninstall.php';
         $existingId = (int) Tab::getIdFromClassName('AdminAiBridgeAiProviders');
 
         if ($existingId) {
-            $tab = new Tab($existingId);
-            if ((int) $tab->id_parent !== $parentId) {
-                $tab->id_parent = $parentId;
-                $tab->save();
+            // A direct UPDATE, not Tab::save() — Tab's own save/update path
+            // recalculates sibling positions and on at least one production
+            // MariaDB version produced a malformed query ("... near 'LIMIT
+            // 1' at line 1") that aborted the whole self-update. Re-parenting
+            // is cosmetic; it must never be able to fail an upgrade.
+            try {
+                Db::getInstance()->execute(
+                    'UPDATE `' . _DB_PREFIX_ . 'tab` SET `id_parent` = ' . (int) $parentId
+                    . ' WHERE `id_tab` = ' . (int) $existingId
+                );
+            } catch (\Throwable $exception) {
+                PrestaShopLogger::addLog('AI Bridge AI providers tab re-parent failed: ' . $exception->getMessage(), 2);
             }
 
             return true;
