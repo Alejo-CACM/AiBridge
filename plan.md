@@ -332,6 +332,18 @@ Por qué solo aparecía ahora: `wephone.es` y `saruia.es` se desplegaron siempre
 
 **Ambos sitios quedaron sincronizados de una** (no hizo falta que el usuario tocara "Actualizar ahora" de nuevo): se corrió `runUpgradeModule()` directo contra cada uno tras subir el fix — `wephone.es` corrió sus 36 scripts pendientes y `saruia.es` sus 31, ambos `success:true`, `upgraded_to` la versión final, `number_upgrade_left:0`. `ps_module.version` de ambos sitios ya está sincronizado con el código real por primera vez en este proyecto — el próximo "Actualizar ahora" en cualquiera de los dos debería ser incremental (solo los scripts nuevos), no un replay completo.
 
+## 24. Bug real en el controlador de Analítica: colisión de nombre con el core (2026-08-22)
+
+Versión `1.20.3`. Con el update ya funcionando (sección 23), la página "AI Bridge Analítica" daba **500 Internal Server Error**. Diagnosticado leyendo el log de errores real del hosting por FTP (`.logs/error_log_saruia_es` en Hostinger) en vez de adivinar:
+
+`PHP Fatal error: Access level to AdminAiBridgeAnalyticsController::renderKpis() must be public (as in class AdminControllerCore)`
+
+`AdminControllerCore` de PrestaShop ya tiene un método público `renderKpis()` (el panel de cajitas KPI nativo de las páginas de listado) — mi método propio se llamaba exactamente igual pero `private`, y PHP no permite reducir visibilidad al heredar. Coincidencia de nombre, no relacionado con nada de lo anterior. **Fix**: renombrado a `renderKpiCards()`.
+
+**Método de diagnóstico nuevo, más directo que los anteriores**: en vez de replicar el flujo completo del Back Office con scripts puntuales, esta vez se leyó directamente el log de errores de PHP del hosting (`ftp://.../.logs/error_log_<dominio>` en Hostinger, `/var/www/vhosts/system/<dominio>/logs/` en Plesk) — da archivo y línea exactos sin necesidad de instrumentar nada. Antes de intentar reproducir un 500 con scripts custom, revisar el log de errores real del hosting primero.
+
+Desplegado y verificado en ambos sitios (`saruia.es` y `wephone.es`) directo por FTP/SFTP, con `runUpgradeModule()` corrido a mano para mantener `ps_module.version` sincronizado — ambos quedaron limpios en `1.20.3`.
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.

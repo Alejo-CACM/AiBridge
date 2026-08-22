@@ -31,7 +31,7 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         $lowStock = $analytics->lowStockProducts(5);
 
         return $this->renderRangeForm($from, $to, $preset)
-            . $this->renderKpis($kpis)
+            . $this->renderKpiCards($kpis)
             . $this->renderSalesByDay($salesByDay)
             . '<div class="row">'
             . '<div class="col-lg-6">' . $this->renderTopProducts($topProducts) . '</div>'
@@ -127,7 +127,7 @@ class AdminAiBridgeAnalyticsController extends ModuleAdminController
         return $html;
     }
 
-    private function renderKpis(array $kpis)
+    private function renderKpiCards(array $kpis)
     {
         $cards = array(
             array('label' => 'Pedidos', 'value' => (string) $kpis['orders_count']),
