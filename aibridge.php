@@ -20,7 +20,7 @@ class AiBridge extends Module
     {
         $this->name = 'aibridge';
         $this->tab = 'administration';
-        $this->version = '1.20.8';
+        $this->version = '1.20.9';
         $this->author = 'Proyecto profesional';
         $this->need_instance = 0;
         $this->bootstrap = true;

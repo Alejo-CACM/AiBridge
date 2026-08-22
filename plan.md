@@ -391,6 +391,17 @@ Versión `1.20.8`. El usuario pidió traer el log del **hosting** (no solo `ps_l
 
 **Hallazgos reales ya visibles en el log de `wephone.es`** gracias a esto: error de núcleo repetido `Call to a member function getAttributeCombinations() on null` en `ProductController.php` al entrar a ciertos productos; el módulo `zakeke` roto (`Class "ZakekeApi" not found`, falla en cada carga); intentos de escaneo (`/.env`, `/.git/`) correctamente bloqueados por ModSecurity — nada que arreglar ahí. Pendiente: limpiar las carpetas `aibridge_backup_*`/`aibridge_failed_*` que quedaron de las reparaciones de hoy (generan ruido de `AH01276` en el log de Apache).
 
+## 29. Pasada de limpieza de código (2026-08-22)
+
+Versión `1.20.9`. A pedido explícito del usuario ("no vamos a implementar nada por ahora, hacer limpieza y colocar el código más limpio, verificar que todo esté bien") — sin features nuevas, solo higiene:
+
+* **Bug real corregido**: el bloque de código muerto ya documentado en la sección "Notas y bloqueos" (`AiBridgeApprovalExecutor::validatePayload()`, dos `if ($field === 'combinations')` seguidos) — no era solo "código muerto sin efecto" como se pensó en su momento: el segundo bloque, si el primero fallaba, silenciaba el campo (`continue` incondicional) en vez de dejar que cayera hasta la excepción final de payload inválido. Eliminado.
+* Revisado (sin hallazgos que ameriten cambio): sin restos de `var_dump`/`print_r`/`die`/`error_log` de debug en `classes/`; `AGENTS.md` no necesita actualizarse por Chat/Analítica porque esas son pantallas de Back Office, no parte de la API HTTP que ese documento describe.
+* **Limpieza de servidor**: borradas las carpetas basura `aibridge_backup_*`/`aibridge_failed_*`/`aibridge_incoming_*` que quedaron en `wephone.es` de las reparaciones de hoy (generaban ruido `AH01276` en el log de Apache). El bloqueo de LaLiga/Cloudflare (ver más abajo) impidió usar el script PHP de limpieza normal — se hizo con un script bash que recorre y borra por SFTP directo (más lento, pero no depende de HTTPS).
+* Smoke test (7/7) corrido contra `saruia.es` después del fix, sin regresiones.
+
+**Nota aparte, no relacionada con el módulo**: durante esta sesión `wephone.es` quedó inaccesible por HTTPS un rato — no es un problema del sitio ni del módulo, es el bloqueo judicial de IPs de Cloudflare que fuerzan los ISP españoles por orden de LaLiga (comparte IP con sitios de streaming pirata bloqueados). El acceso SFTP directo al servidor no se ve afectado, solo el tráfico HTTPS a través de Cloudflare. Intermitente — va y viene.
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.
