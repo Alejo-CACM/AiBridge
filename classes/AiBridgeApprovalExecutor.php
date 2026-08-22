@@ -514,12 +514,6 @@ class AiBridgeApprovalExecutor
                 if ($normalized !== null) { $fields['combinations'] = $normalized; continue; }
             }
 
-            if ($field === 'combinations') {
-                $normalized = $this->getCombinationHandler()->normalize($value, $product, Context::getContext()->language->id);
-                if ($normalized !== null) $payload['combinations'] = $normalized;
-                continue;
-            }
-
             if ($field === 'stock') {
                 $normalized = $this->getStockHandler()->normalize($value, $product);
                 if ($normalized !== null) {
