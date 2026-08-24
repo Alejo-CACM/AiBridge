@@ -81,7 +81,10 @@ class AiBridgeAnthropicClient implements AiBridgeAiClientInterface
                     'type' => 'tool_use',
                     'id' => (string) $call['id'],
                     'name' => (string) $call['name'],
-                    'input' => $call['arguments'],
+                    // A PHP empty array json_encode()s as "[]", not "{}" -
+                    // force an object for a no-argument tool call (e.g.
+                    // category_list) or Anthropic rejects "input" as an array.
+                    'input' => $call['arguments'] ? $call['arguments'] : new \stdClass(),
                 );
             }
 

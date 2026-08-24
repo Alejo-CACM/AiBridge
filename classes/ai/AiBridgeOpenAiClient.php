@@ -85,7 +85,13 @@ class AiBridgeOpenAiClient implements AiBridgeAiClientInterface
                         'type' => 'function',
                         'function' => array(
                             'name' => (string) $call['name'],
-                            'arguments' => json_encode($call['arguments']),
+                            // json_encode(array()) always produces "[]", not
+                            // "{}" — PHP can't tell an empty array from an
+                            // empty object. OpenAI requires arguments to be a
+                            // JSON *object* string, so a no-argument tool
+                            // call (e.g. category_list) must be forced to
+                            // "{}" or the API rejects the whole message.
+                            'arguments' => $call['arguments'] ? json_encode($call['arguments']) : '{}',
                         ),
                     );
                 }, $message['tool_calls']),

@@ -402,6 +402,18 @@ Versión `1.20.9`. A pedido explícito del usuario ("no vamos a implementar nada
 
 **Nota aparte, no relacionada con el módulo**: durante esta sesión `wephone.es` quedó inaccesible por HTTPS un rato — no es un problema del sitio ni del módulo, es el bloqueo judicial de IPs de Cloudflare que fuerzan los ISP españoles por orden de LaLiga (comparte IP con sitios de streaming pirata bloqueados). El acceso SFTP directo al servidor no se ve afectado, solo el tráfico HTTPS a través de Cloudflare. Intermitente — va y viene.
 
+## 30. Bug real en el chat con IA: herramientas sin argumentos rompían el turno siguiente (2026-08-22)
+
+Versión `1.20.10`. Reportado por el usuario probando el chat en vivo: `category_list` se ejecutaba bien, pero el turno siguiente fallaba con `AI provider error: Validation: messages[6].tool_calls[0].function.arguments must be a valid JSON object string`.
+
+**Causa real**: `json_encode(array())` en PHP siempre produce `"[]"`, nunca `"{}"` — PHP no puede distinguir un array vacío de un objeto vacío. Cuando la IA llama una herramienta sin argumentos (`category_list`, `brands_list`), `$call['arguments']` es un array PHP vacío; al reserializar ese mensaje del asistente para el siguiente turno, `AiBridgeOpenAiClient::toWireMessage()` mandaba `"arguments":"[]"` en vez de `"arguments":"{}"` — OpenAI exige que sea un objeto JSON, no un array, y rechaza todo el mensaje. Mismo bug latente en `AiBridgeAnthropicClient` (`"input":[]` en vez de `"input":{}`), aunque no se había disparado en las pruebas.
+
+**Fix**: en ambos clientes, si `$call['arguments']` está vacío, forzar `'{}'` (OpenAI) o `new stdClass()` (Anthropic) en vez de dejar que `json_encode()` de un array vacío se cuele.
+
+**Hallazgo colateral durante el despliegue del fix**: a `saruia.es` le faltaba **toda la carpeta `classes/ai/`** (los 7 archivos: `AiBridgeOpenAiClient`, `AiBridgeAnthropicClient`, `AiBridgeAiClientFactory`, `AiBridgeAiClientInterface`, `AiBridgeChatOrchestrator`, `AiBridgeToolExecutor`, `AiBridgeToolRegistry`) — nunca se había desplegado correctamente ahí desde la 1.19.0. El chat con IA probablemente nunca funcionó en `saruia.es`. Causa del despliegue fallido: un comando SFTP (`mkdir`) ejecutado contra el puerto FTP (21) por error creó una carpeta `ai` suelta en la raíz del FTP en vez de dentro de `classes/` — **`saruia.es` solo habla FTP puro (puerto 21), no SFTP (puerto 22)**, a diferencia de `wephone.es` que sí tiene SSH/SFTP real. Corregido subiendo los 7 archivos con `curl --ftp-create-dirs`, que crea el directorio remoto correcto automáticamente.
+
+Verificado con una prueba directa (reflexión sobre `toWireMessage()` con argumentos vacíos) antes de publicar: ambos clientes ahora serializan `{}` correctamente.
+
 ## 12. Notas y bloqueos
 
 * **2026-08-06** — Revisión completa del código confirmó que el estado real iba muy por delante de este archivo (que no existía como archivo en el repo hasta hoy, solo se había compartido su contenido por chat): captura de diagnóstico de fallos (antigua Fase 1.1/1.2) y rollback (antigua Fase 3) ya estaban implementados en el código antes de esta sesión.
